@@ -1,0 +1,42 @@
+kind: live
+title: llama_factory
+
+# other files from https://github.com/hiyouga/LLaMA-Factory
+
+defaults:
+  life_span: 5d
+
+images:
+  llama_factory:
+    ref: image:$[[ project.id ]]:v1
+    dockerfile: $[[ flow.workspace ]]/Dockerfile
+    context: $[[ flow.workspace ]]/
+
+volumes:
+  hf_cache:
+    remote: storage:$[[ flow.project_id ]]/hf_cache
+    mount: /root/.cache/huggingface
+    local: hf_cache
+  data:
+    remote: storage:$[[ flow.project_id ]]/data
+    mount: /app/data
+    local: data
+  output:
+    remote: storage:$[[ flow.project_id ]]/output
+    mount: /app/output
+    local: output
+
+jobs:
+  llama_factory:
+    image: ${{ images.llama_factory.ref }}
+    name: llama-factory
+    preset: H100x1
+    http_port: "7860"
+    # detach: true
+    browse: true
+    env:
+      HF_TOKEN: secret:HF_TOKEN
+    volumes:
+      - ${{ volumes.data.ref_rw }}
+      - ${{ volumes.output.ref_rw }}
+      - ${{ volumes.hf_cache.ref_rw }}
