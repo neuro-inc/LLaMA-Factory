@@ -9,7 +9,7 @@ defaults:
 images:
   llama_factory:
     ref: image:$[[ project.id ]]:v1
-    dockerfile: $[[ flow.workspace ]]/Dockerfile
+    dockerfile: $[[ flow.workspace ]]/docker/docker-cuda/Dockerfile
     context: $[[ flow.workspace ]]/
 
 volumes:
