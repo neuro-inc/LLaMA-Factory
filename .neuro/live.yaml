@@ -27,16 +27,17 @@ volumes:
     local: output
 
 jobs:
-  llama_factory:
+  llama_factory_webui:
     image: ${{ images.llama_factory.ref }}
     name: llama-factory
-    preset: H100x1
+    preset: a100x1
     http_port: "7860"
     detach: true
     browse: true
     env:
       HF_TOKEN: secret:HF_TOKEN
     volumes:
-      - ${{ volumes.data.ref_rw }}
+      - ${{ upload(volumes.data).ref_rw }}
       - ${{ volumes.output.ref_rw }}
       - ${{ volumes.hf_cache.ref_rw }}
+    cmd: bash -c "cd /app && llamafactory-cli webui"
