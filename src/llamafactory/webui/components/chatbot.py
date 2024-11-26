@@ -1,3 +1,17 @@
+# Copyright 2024 the LlamaFactory team.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 from typing import TYPE_CHECKING, Dict, Tuple
 
 from ...data import Role
@@ -29,8 +43,12 @@ def create_chat_box(
                         system = gr.Textbox(show_label=False)
                         tools = gr.Textbox(show_label=False, lines=3)
 
-                    with gr.Column() as image_box:
-                        image = gr.Image(sources=["upload"], type="numpy")
+                    with gr.Column() as mm_box:
+                        with gr.Tab("Image"):
+                            image = gr.Image(sources=["upload"], type="pil")
+
+                        with gr.Tab("Video"):
+                            video = gr.Video(sources=["upload"])
 
                 query = gr.Textbox(show_label=False, lines=8)
                 submit_btn = gr.Button(variant="primary")
@@ -49,7 +67,7 @@ def create_chat_box(
         [chatbot, messages, query],
     ).then(
         engine.chatter.stream,
-        [chatbot, messages, system, tools, image, max_new_tokens, top_p, temperature],
+        [chatbot, messages, system, tools, image, video, max_new_tokens, top_p, temperature],
         [chatbot, messages],
     )
     clear_btn.click(lambda: ([], []), outputs=[chatbot, messages])
@@ -62,8 +80,9 @@ def create_chat_box(
             role=role,
             system=system,
             tools=tools,
-            image_box=image_box,
+            mm_box=mm_box,
             image=image,
+            video=video,
             query=query,
             submit_btn=submit_btn,
             max_new_tokens=max_new_tokens,

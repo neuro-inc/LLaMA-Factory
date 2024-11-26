@@ -1,4 +1,22 @@
+# Copyright 2024 THUDM and the LlamaFactory team.
+#
+# This code is inspired by the THUDM's ChatGLM implementation.
+# https://github.com/THUDM/ChatGLM-6B/blob/main/cli_demo.py
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 import asyncio
+import os
 from threading import Thread
 from typing import TYPE_CHECKING, Any, AsyncGenerator, Dict, Generator, List, Optional, Sequence
 
@@ -9,40 +27,53 @@ from .vllm_engine import VllmEngine
 
 
 if TYPE_CHECKING:
-    from numpy.typing import NDArray
-
+    from ..data.mm_plugin import ImageInput, VideoInput
     from .base_engine import BaseEngine, Response
 
 
-def _start_background_loop(loop: asyncio.AbstractEventLoop) -> None:
+def _start_background_loop(loop: "asyncio.AbstractEventLoop") -> None:
     asyncio.set_event_loop(loop)
     loop.run_forever()
 
 
 class ChatModel:
+    r"""
+    General class for chat models. Backed by huggingface or vllm engines.
+
+    Supports both sync and async methods.
+    Sync methods: chat(), stream_chat() and get_scores().
+    Async methods: achat(), astream_chat() and aget_scores().
+    """
+
     def __init__(self, args: Optional[Dict[str, Any]] = None) -> None:
         model_args, data_args, finetuning_args, generating_args = get_infer_args(args)
+        self.engine_type = model_args.infer_backend
         if model_args.infer_backend == "huggingface":
             self.engine: "BaseEngine" = HuggingfaceEngine(model_args, data_args, finetuning_args, generating_args)
         elif model_args.infer_backend == "vllm":
             self.engine: "BaseEngine" = VllmEngine(model_args, data_args, finetuning_args, generating_args)
         else:
-            raise NotImplementedError("Unknown backend: {}".format(model_args.infer_backend))
+            raise NotImplementedError(f"Unknown backend: {model_args.infer_backend}")
 
         self._loop = asyncio.new_event_loop()
         self._thread = Thread(target=_start_background_loop, args=(self._loop,), daemon=True)
         self._thread.start()
-        asyncio.run_coroutine_threadsafe(self.engine.start(), self._loop)
 
     def chat(
         self,
         messages: Sequence[Dict[str, str]],
         system: Optional[str] = None,
         tools: Optional[str] = None,
-        image: Optional["NDArray"] = None,
+        images: Optional[Sequence["ImageInput"]] = None,
+        videos: Optional[Sequence["VideoInput"]] = None,
         **input_kwargs,
     ) -> List["Response"]:
-        task = asyncio.run_coroutine_threadsafe(self.achat(messages, system, tools, image, **input_kwargs), self._loop)
+        r"""
+        Gets a list of responses of the chat model.
+        """
+        task = asyncio.run_coroutine_threadsafe(
+            self.achat(messages, system, tools, images, videos, **input_kwargs), self._loop
+        )
         return task.result()
 
     async def achat(
@@ -50,20 +81,28 @@ class ChatModel:
         messages: Sequence[Dict[str, str]],
         system: Optional[str] = None,
         tools: Optional[str] = None,
-        image: Optional["NDArray"] = None,
+        images: Optional[Sequence["ImageInput"]] = None,
+        videos: Optional[Sequence["VideoInput"]] = None,
         **input_kwargs,
     ) -> List["Response"]:
-        return await self.engine.chat(messages, system, tools, image, **input_kwargs)
+        r"""
+        Asynchronously gets a list of responses of the chat model.
+        """
+        return await self.engine.chat(messages, system, tools, images, videos, **input_kwargs)
 
     def stream_chat(
         self,
         messages: Sequence[Dict[str, str]],
         system: Optional[str] = None,
         tools: Optional[str] = None,
-        image: Optional["NDArray"] = None,
+        images: Optional[Sequence["ImageInput"]] = None,
+        videos: Optional[Sequence["VideoInput"]] = None,
         **input_kwargs,
     ) -> Generator[str, None, None]:
-        generator = self.astream_chat(messages, system, tools, image, **input_kwargs)
+        r"""
+        Gets the response token-by-token of the chat model.
+        """
+        generator = self.astream_chat(messages, system, tools, images, videos, **input_kwargs)
         while True:
             try:
                 task = asyncio.run_coroutine_threadsafe(generator.__anext__(), self._loop)
@@ -76,10 +115,14 @@ class ChatModel:
         messages: Sequence[Dict[str, str]],
         system: Optional[str] = None,
         tools: Optional[str] = None,
-        image: Optional["NDArray"] = None,
+        images: Optional[Sequence["ImageInput"]] = None,
+        videos: Optional[Sequence["VideoInput"]] = None,
         **input_kwargs,
     ) -> AsyncGenerator[str, None]:
-        async for new_token in self.engine.stream_chat(messages, system, tools, image, **input_kwargs):
+        r"""
+        Asynchronously gets the response token-by-token of the chat model.
+        """
+        async for new_token in self.engine.stream_chat(messages, system, tools, images, videos, **input_kwargs):
             yield new_token
 
     def get_scores(
@@ -87,6 +130,9 @@ class ChatModel:
         batch_input: List[str],
         **input_kwargs,
     ) -> List[float]:
+        r"""
+        Gets a list of scores of the reward model.
+        """
         task = asyncio.run_coroutine_threadsafe(self.aget_scores(batch_input, **input_kwargs), self._loop)
         return task.result()
 
@@ -95,17 +141,18 @@ class ChatModel:
         batch_input: List[str],
         **input_kwargs,
     ) -> List[float]:
+        r"""
+        Asynchronously gets a list of scores of the reward model.
+        """
         return await self.engine.get_scores(batch_input, **input_kwargs)
 
 
 def run_chat() -> None:
-    try:
-        import platform
-
-        if platform.system() != "Windows":
+    if os.name != "nt":
+        try:
             import readline  # noqa: F401
-    except ImportError:
-        print("Install `readline` for a better experience.")
+        except ImportError:
+            print("Install `readline` for a better experience.")
 
     chat_model = ChatModel()
     messages = []

@@ -1,5 +1,19 @@
+# Copyright 2024 the LlamaFactory team.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 from dataclasses import asdict, dataclass, field
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 
 @dataclass
@@ -45,6 +59,10 @@ class GeneratingArguments:
     length_penalty: float = field(
         default=1.0,
         metadata={"help": "Exponential penalty to the length that is used with beam-based generation."},
+    )
+    default_system: Optional[str] = field(
+        default=None,
+        metadata={"help": "Default system message to use in chat completion."},
     )
 
     def to_dict(self) -> Dict[str, Any]:

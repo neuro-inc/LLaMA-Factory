@@ -1,13 +1,21 @@
-# coding=utf-8
-# Converts the Baichuan2-7B model in the same format as LLaMA2-7B.
-# Usage: python llamafy_baichuan2.py --input_dir input --output_dir output
-# Inspired by: https://huggingface.co/fireballoon/baichuan-llama-7b/blob/main/convert_baichuan_to_llama.py
-# Converted model: https://huggingface.co/hiyouga/Baichuan2-7B-Base-LLaMAfied
+# Copyright 2024 the LlamaFactory team.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 
 import json
 import os
 from collections import OrderedDict
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
 import fire
 import torch
@@ -54,16 +62,16 @@ def save_weight(input_dir: str, output_dir: str, shard_size: str, save_safetenso
             torch.save(shard, os.path.join(output_dir, shard_file))
 
     if index is None:
-        print("Model weights saved in {}".format(os.path.join(output_dir, WEIGHTS_NAME)))
+        print(f"Model weights saved in {os.path.join(output_dir, WEIGHTS_NAME)}")
     else:
         index_name = SAFE_WEIGHTS_INDEX_NAME if save_safetensors else WEIGHTS_INDEX_NAME
         with open(os.path.join(output_dir, index_name), "w", encoding="utf-8") as f:
             json.dump(index, f, indent=2, sort_keys=True)
-        print("Model weights saved in {}".format(output_dir))
+        print(f"Model weights saved in {output_dir}")
 
 
 def save_config(input_dir: str, output_dir: str):
-    with open(os.path.join(input_dir, CONFIG_NAME), "r", encoding="utf-8") as f:
+    with open(os.path.join(input_dir, CONFIG_NAME), encoding="utf-8") as f:
         llama2_config_dict: Dict[str, Any] = json.load(f)
 
     llama2_config_dict["architectures"] = ["LlamaForCausalLM"]
@@ -73,12 +81,20 @@ def save_config(input_dir: str, output_dir: str):
 
     with open(os.path.join(output_dir, CONFIG_NAME), "w", encoding="utf-8") as f:
         json.dump(llama2_config_dict, f, indent=2)
-    print("Model config saved in {}".format(os.path.join(output_dir, CONFIG_NAME)))
+    print(f"Model config saved in {os.path.join(output_dir, CONFIG_NAME)}")
 
 
 def llamafy_baichuan2(
-    input_dir: str, output_dir: str, shard_size: Optional[str] = "2GB", save_safetensors: Optional[bool] = False
+    input_dir: str,
+    output_dir: str,
+    shard_size: str = "2GB",
+    save_safetensors: bool = True,
 ):
+    r"""
+    Converts the Baichuan2-7B model in the same format as LLaMA2-7B.
+    Usage: python llamafy_baichuan2.py --input_dir input --output_dir output
+    Converted model: https://huggingface.co/hiyouga/Baichuan2-7B-Base-LLaMAfied
+    """
     try:
         os.makedirs(output_dir, exist_ok=False)
     except Exception as e:

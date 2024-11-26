@@ -1,3 +1,17 @@
+# Copyright 2024 the LlamaFactory team.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 import json
 import math
 import os
@@ -5,7 +19,7 @@ from typing import Any, Dict, List
 
 from transformers.trainer import TRAINER_STATE_NAME
 
-from .logging import get_logger
+from . import logging
 from .packages import is_matplotlib_available
 
 
@@ -14,7 +28,7 @@ if is_matplotlib_available():
     import matplotlib.pyplot as plt
 
 
-logger = get_logger(__name__)
+logger = logging.get_logger(__name__)
 
 
 def smooth(scalars: List[float]) -> List[float]:
@@ -56,12 +70,12 @@ def gen_loss_plot(trainer_log: List[Dict[str, Any]]) -> "matplotlib.figure.Figur
     return fig
 
 
-def plot_loss(save_dictionary: os.PathLike, keys: List[str] = ["loss"]) -> None:
+def plot_loss(save_dictionary: str, keys: List[str] = ["loss"]) -> None:
     r"""
     Plots loss curves and saves the image.
     """
     plt.switch_backend("agg")
-    with open(os.path.join(save_dictionary, TRAINER_STATE_NAME), "r", encoding="utf-8") as f:
+    with open(os.path.join(save_dictionary, TRAINER_STATE_NAME), encoding="utf-8") as f:
         data = json.load(f)
 
     for key in keys:
@@ -72,13 +86,13 @@ def plot_loss(save_dictionary: os.PathLike, keys: List[str] = ["loss"]) -> None:
                 metrics.append(data["log_history"][i][key])
 
         if len(metrics) == 0:
-            logger.warning(f"No metric {key} to plot.")
+            logger.warning_rank0(f"No metric {key} to plot.")
             continue
 
         plt.figure()
         plt.plot(steps, metrics, color="#1f77b4", alpha=0.4, label="original")
         plt.plot(steps, smooth(metrics), color="#1f77b4", label="smoothed")
-        plt.title("training {} of {}".format(key, save_dictionary))
+        plt.title(f"training {key} of {save_dictionary}")
         plt.xlabel("step")
         plt.ylabel(key)
         plt.legend()
