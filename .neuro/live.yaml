@@ -41,3 +41,20 @@ jobs:
       - ${{ volumes.output.ref_rw }}
       - ${{ volumes.hf_cache.ref_rw }}
     cmd: bash -c "cd /app && llamafactory-cli webui"
+
+  vllm:
+    image: vllm/vllm-openai:v0.6.4.post1
+    name: vllm
+    preset: a100x1
+    detach: true
+    http_port: "8000"
+    volumes:
+      - ${{ volumes.output.ref_rw }}
+    env:
+      HF_TOKEN: secret:HF_TOKEN
+    cmd: >
+      --model meta-llama/Meta-Llama-3.1-8B-Instruct
+      --tokenizer meta-llama/Meta-Llama-3.1-8B-Instruct
+      --enable-lora
+      --lora-modules trained_lora=/app/saves/Llama-3.1-8B-Instruct/lora/train_2024-11-26-16-47-45
+      --dtype=half
