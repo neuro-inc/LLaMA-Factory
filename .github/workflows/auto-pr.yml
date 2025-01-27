@@ -8,7 +8,7 @@ on:
 
 jobs:
   autoupdate:
-    uses: neuro-inc/reuse/.github/workflows/auto-pr.yaml@auto-pr-output
+    uses: neuro-inc/reuse/.github/workflows/auto-pr.yaml@master
     with:
       upstream_repository: https://github.com/hiyouga/LLaMA-Factory
       upstream_branch: main
