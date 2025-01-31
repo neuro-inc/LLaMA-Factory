@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import os
+import platform
 
 from ..extras.packages import is_gradio_available
 from .common import save_config
@@ -34,8 +35,9 @@ if is_gradio_available():
 
 def create_ui(demo_mode: bool = False) -> "gr.Blocks":
     engine = Engine(demo_mode=demo_mode, pure_chat=False)
+    hostname = os.getenv("HOSTNAME", os.getenv("COMPUTERNAME", platform.node())).split(".")[0]
 
-    with gr.Blocks(title="LLaMA Board", css=CSS) as demo:
+    with gr.Blocks(title=f"LLaMA Board ({hostname})", css=CSS) as demo:
         if demo_mode:
             gr.HTML("<h1><center>LLaMA Board: A One-stop Web UI for Getting Started with LLaMA Factory</center></h1>")
             gr.HTML(
@@ -71,7 +73,7 @@ def create_web_demo() -> "gr.Blocks":
     engine = Engine(pure_chat=True)
 
     with gr.Blocks(title="Web Demo", css=CSS) as demo:
-        lang = gr.Dropdown(choices=["en", "ru", "zh", "ko"], scale=1)
+        lang = gr.Dropdown(choices=["en", "ru", "zh", "ko", "ja"], scale=1)
         engine.manager.add_elems("top", dict(lang=lang))
 
         _, _, chat_elems = create_chat_box(engine, visible=True)

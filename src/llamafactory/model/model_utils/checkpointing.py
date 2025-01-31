@@ -122,7 +122,7 @@ def _gradient_checkpointing_enable(
     if "value" in inspect.signature(self._set_gradient_checkpointing).parameters:  # old GC format
         self.apply(partial(self._set_gradient_checkpointing, value=True))
         self.enable_input_require_grads()
-        logger.warning_once("You are using the old GC format, some features (e.g. BAdam) will be invalid.")
+        logger.warning_rank0_once("You are using the old GC format, some features (e.g. BAdam) will be invalid.")
     else:  # have already enabled input require gradients
         self._set_gradient_checkpointing(enable=True, gradient_checkpointing_func=gradient_checkpointing_func)
 
@@ -156,7 +156,9 @@ def prepare_model_for_training(model: "PreTrainedModel", model_args: "ModelArgum
                 _gradient_checkpointing_enable, use_unsloth_gc=model_args.use_unsloth_gc
             )
             model.gradient_checkpointing_enable = MethodType(gradient_checkpointing_enable, model)
-            model.gradient_checkpointing_enable(gradient_checkpointing_kwargs={"use_reentrant": True})
+            model.gradient_checkpointing_enable(
+                gradient_checkpointing_kwargs={"use_reentrant": model_args.use_reentrant_gc}
+            )
             setattr(model.config, "use_cache", False)  # turn off when gradient checkpointing is enabled
             logger.info_rank0("Gradient checkpointing enabled.")
 

@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import os
 from typing import TYPE_CHECKING, Any, Dict, Optional, TypedDict
 
 import torch
@@ -52,7 +53,7 @@ def _get_init_kwargs(model_args: "ModelArguments") -> Dict[str, Any]:
     skip_check_imports()
     model_args.model_name_or_path = try_download_model_from_other_hub(model_args)
     return {
-        "trust_remote_code": True,
+        "trust_remote_code": model_args.trust_remote_code,
         "cache_dir": model_args.cache_dir,
         "revision": model_args.model_revision,
         "token": model_args.hf_hub_token,
@@ -85,17 +86,7 @@ def load_tokenizer(model_args: "ModelArguments") -> "TokenizerModule":
     except Exception as e:
         raise OSError("Failed to load tokenizer.") from e
 
-    if model_args.new_special_tokens is not None:
-        num_added_tokens = tokenizer.add_special_tokens(
-            dict(additional_special_tokens=model_args.new_special_tokens),
-            replace_additional_special_tokens=False,
-        )
-        logger.info_rank0("Add {} to special tokens.".format(",".join(model_args.new_special_tokens)))
-        if num_added_tokens > 0 and not model_args.resize_vocab:
-            model_args.resize_vocab = True
-            logger.warning_rank0("New tokens have been added, changed `resize_vocab` to True.")
-
-    patch_tokenizer(tokenizer)
+    patch_tokenizer(tokenizer, model_args)
     try:
         processor = AutoProcessor.from_pretrained(model_args.model_name_or_path, **init_kwargs)
         patch_processor(processor, config, tokenizer, model_args)
@@ -155,7 +146,7 @@ def load_model(
                 load_class = AutoModelForCausalLM
 
             if model_args.train_from_scratch:
-                model = load_class.from_config(config, trust_remote_code=True)
+                model = load_class.from_config(config, trust_remote_code=model_args.trust_remote_code)
             else:
                 model = load_class.from_pretrained(**init_kwargs)
 
@@ -202,12 +193,8 @@ def load_model(
 
     logger.info_rank0(param_stats)
 
-    if model_args.print_param_status:
+    if model_args.print_param_status and int(os.getenv("LOCAL_RANK", "0")) == 0:
         for name, param in model.named_parameters():
-            print(
-                "name: {}, dtype: {}, device: {}, trainable: {}".format(
-                    name, param.dtype, param.device, param.requires_grad
-                )
-            )
+            print(f"name: {name}, dtype: {param.dtype}, device: {param.device}, trainable: {param.requires_grad}")
 
     return model
