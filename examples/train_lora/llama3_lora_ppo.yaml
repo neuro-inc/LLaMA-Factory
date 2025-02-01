@@ -1,11 +1,13 @@
 ### model
 model_name_or_path: meta-llama/Meta-Llama-3-8B-Instruct
 reward_model: saves/llama3-8b/lora/reward
+trust_remote_code: true
 
 ### method
 stage: ppo
 do_train: true
 finetuning_type: lora
+lora_rank: 8
 lora_target: all
 
 ### dataset
