@@ -1,4 +1,4 @@
-# Copyright 2024 the LlamaFactory team.
+# Copyright 2025 the LlamaFactory team.
 #
 # This code is inspired by the Dan's test library.
 # https://github.com/hendrycks/test/blob/master/evaluate_flan.py
@@ -100,7 +100,7 @@ class Evaluator:
                 cache_dir=self.model_args.cache_dir,
                 download_mode=self.eval_args.download_mode,
                 token=self.model_args.hf_hub_token,
-                trust_remote_code=True,
+                trust_remote_code=self.model_args.trust_remote_code,
             )
             pbar.set_postfix_str(categorys[subject]["name"])
             inputs, outputs, labels = [], [], []
