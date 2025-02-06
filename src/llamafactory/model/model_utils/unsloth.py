@@ -1,4 +1,4 @@
-# Copyright 2024 the LlamaFactory team.
+# Copyright 2025 the LlamaFactory team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -39,7 +39,7 @@ def _get_unsloth_kwargs(
         "device_map": {"": get_current_device()},
         "rope_scaling": getattr(config, "rope_scaling", None),
         "fix_tokenizer": False,
-        "trust_remote_code": True,
+        "trust_remote_code": model_args.trust_remote_code,
         "use_gradient_checkpointing": "unsloth",
     }
 
