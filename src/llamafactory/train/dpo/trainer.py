@@ -19,7 +19,7 @@ import warnings
 from collections import defaultdict
 from contextlib import nullcontext
 from types import MethodType
-from typing import TYPE_CHECKING, Dict, Literal, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Dict, List, Literal, Optional, Tuple, Union
 
 import torch
 import torch.nn.functional as F
@@ -29,9 +29,9 @@ from trl.trainer import disable_dropout_in_model
 from typing_extensions import override
 
 from ...extras.constants import IGNORE_INDEX
-from ...extras.packages import is_transformers_version_equal_to_4_46
-from ..callbacks import PissaConvertCallback, SaveProcessorCallback
-from ..trainer_utils import create_custom_optimizer, create_custom_scheduler, get_batch_logps
+from ...extras.packages import is_transformers_version_greater_than
+from ..callbacks import SaveProcessorCallback
+from ..trainer_utils import create_custom_optimizer, create_custom_scheduler, get_batch_logps, nested_detach
 
 
 if TYPE_CHECKING:
@@ -50,6 +50,9 @@ class CustomDPOTrainer(DPOTrainer):
         disable_dropout: bool = True,
         **kwargs,
     ):
+        if is_transformers_version_greater_than("4.46"):
+            kwargs["processing_class"] = kwargs.pop("tokenizer")
+
         if disable_dropout:
             disable_dropout_in_model(model)
             if ref_model is not None:
@@ -79,6 +82,7 @@ class CustomDPOTrainer(DPOTrainer):
         self.simpo_gamma = finetuning_args.simpo_gamma
 
         Trainer.__init__(self, model=model, **kwargs)
+        self.model_accepts_loss_kwargs = False  # overwrite trainer's default behavior
         if not hasattr(self, "accelerator"):
             raise AttributeError("Please update `transformers`.")
 
@@ -96,9 +100,6 @@ class CustomDPOTrainer(DPOTrainer):
 
         if processor is not None:
             self.add_callback(SaveProcessorCallback(processor))
-
-        if finetuning_args.pissa_convert:
-            self.callback_handler.add_callback(PissaConvertCallback)
 
         if finetuning_args.use_badam:
             from badam import BAdamCallback, clip_grad_norm_old_version  # type: ignore
@@ -118,6 +119,13 @@ class CustomDPOTrainer(DPOTrainer):
     ) -> "torch.optim.lr_scheduler.LRScheduler":
         create_custom_scheduler(self.args, num_training_steps, optimizer)
         return super().create_scheduler(num_training_steps, optimizer)
+
+    @override
+    def _get_train_sampler(self) -> Optional["torch.utils.data.Sampler"]:
+        if self.finetuning_args.disable_shuffling:
+            return torch.utils.data.SequentialSampler(self.train_dataset)
+
+        return super()._get_train_sampler()
 
     @override
     def get_batch_samples(self, epoch_iterator, num_batches):
@@ -185,7 +193,7 @@ class CustomDPOTrainer(DPOTrainer):
         Otherwise the average log probabilities.
         """
         if self.finetuning_args.use_ref_model:
-            batch = {k: v.detach().clone() for k, v in batch.items()}  # avoid error
+            batch = nested_detach(batch, clone=True)  # avoid error
 
         all_logits: "torch.Tensor" = model(**batch, return_dict=True, use_cache=False).logits.to(torch.float32)
         all_logps, valid_length = get_batch_logps(logits=all_logits, labels=batch["labels"])
@@ -196,7 +204,11 @@ class CustomDPOTrainer(DPOTrainer):
         chosen_logps, rejected_logps = all_logps.split(batch_size, dim=0)
         chosen_logits, rejected_logits = all_logits.split(batch_size, dim=0)
         chosen_length, _ = valid_length.split(batch_size, dim=0)
-        return chosen_logps, rejected_logps, chosen_logits, rejected_logits, chosen_logps / chosen_length
+
+        if self.loss_type in ["ipo", "orpo", "simpo"]:
+            return chosen_logps, rejected_logps, chosen_logits, rejected_logits, chosen_logps
+        else:
+            return chosen_logps, rejected_logps, chosen_logits, rejected_logits, chosen_logps / chosen_length
 
     @override
     def compute_reference_log_probs(
@@ -266,22 +278,16 @@ class CustomDPOTrainer(DPOTrainer):
         return losses.mean(), metrics
 
     @override
-    def compute_loss(self, model, inputs, return_outputs=False, **kwargs):
+    def compute_loss(
+        self, model: "PreTrainedModel", inputs: Dict[str, "torch.Tensor"], return_outputs: bool = False, **kwargs
+    ) -> Union["torch.Tensor", Tuple["torch.Tensor", List["torch.Tensor"]]]:
         r"""
-        Fixes the loss value for transformers 4.46.0.
-        https://github.com/huggingface/transformers/blob/v4.46.0/src/transformers/trainer.py#L3605
+        Subclass and override to accept extra kwargs.
         """
-        loss = super().compute_loss(model, inputs, return_outputs)
-        if is_transformers_version_equal_to_4_46() and kwargs.pop("num_items_in_batch", False):
-            if return_outputs:
-                return (loss[0] / self.args.gradient_accumulation_steps, *loss[1:])
-            else:
-                return loss / self.args.gradient_accumulation_steps
-
-        return loss
+        return super().compute_loss(model, inputs, return_outputs)
 
     @override
-    def log(self, logs: Dict[str, float]) -> None:
+    def log(self, logs: Dict[str, float], *args, **kwargs) -> None:
         r"""
         Log `logs` on the various objects watching training, including stored metrics.
         """
@@ -305,4 +311,4 @@ class CustomDPOTrainer(DPOTrainer):
             if not key.startswith("dummy_"):
                 logs[key] = metric
 
-        return Trainer.log(self, logs)
+        return Trainer.log(self, logs, *args, **kwargs)
