@@ -660,5 +660,35 @@
       "prompt": "content"
     },
     "folder": "python"
-  }
+  },
+  "bespokelabs/Bespoke-Stratos-17k": {
+    "hf_hub_url": "bespokelabs/Bespoke-Stratos-17k",
+    "formatting": "sharegpt",
+    "ranking": false,
+    "columns": {
+        "system": "system",
+        "messages": "conversations"
+    },
+    "tags": {
+        "role_tag": "from",
+        "content_tag": "value",
+        "user_tag": "user",
+        "assistant_tag": "assistant"
+    }
+  },
+  "open-r1/OpenR1-Math-220k": {
+    "hf_hub_url": "open-r1/OpenR1-Math-220k",
+    "formatting": "sharegpt", 
+    "ranking": false,
+    "columns": {
+        "messages": "messages"
+    },
+    "tags": {
+        "role_tag": "from",
+        "content_tag": "value",
+        "user_tag": "user",
+        "assistant_tag": "assistant",
+        "system_tag": "system" 
+    }
+}
 }
