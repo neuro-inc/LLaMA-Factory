@@ -676,19 +676,21 @@
         "assistant_tag": "assistant"
     }
   },
-  "open-r1/OpenR1-Math-220k": {
-    "hf_hub_url": "open-r1/OpenR1-Math-220k",
-    "formatting": "sharegpt", 
-    "ranking": false,
-    "columns": {
-        "messages": "messages"
-    },
-    "tags": {
-        "role_tag": "from",
-        "content_tag": "value",
+    "open-r1/OpenR1-Math-220k": {
+      "hf_hub_url": "open-r1/OpenR1-Math-220k", 
+      "formatting": "sharegpt",
+      "ranking": false,
+      "split": "train",
+      "columns": {
+        "messages": "messages"  
+      },
+      "tags": {
+        "role_tag": "role",
+        "content_tag": "content",
         "user_tag": "user",
         "assistant_tag": "assistant",
-        "system_tag": "system" 
+        "system_tag": "system"
+      }
     }
-  }
+  
 }
