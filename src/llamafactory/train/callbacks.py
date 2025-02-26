@@ -1,4 +1,4 @@
-# Copyright 2024 the LlamaFactory team.
+# Copyright 2025 the LlamaFactory team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -35,16 +35,19 @@ from typing_extensions import override
 
 from ..extras import logging
 from ..extras.constants import TRAINER_LOG, V_HEAD_SAFE_WEIGHTS_NAME, V_HEAD_WEIGHTS_NAME
-from ..extras.misc import get_peak_memory
+from ..extras.misc import get_peak_memory, is_env_enabled, use_ray
 
 
 if is_safetensors_available():
     from safetensors import safe_open
     from safetensors.torch import save_file
 
+
 if TYPE_CHECKING:
     from transformers import TrainerControl, TrainerState, TrainingArguments
     from trl import AutoModelForCausalLMWithValueHead
+
+    from ..hparams import DataArguments, FinetuningArguments, GeneratingArguments, ModelArguments
 
 
 logger = logging.get_logger(__name__)
@@ -101,9 +104,6 @@ class FixValueHeadModelCallback(TrainerCallback):
 
     @override
     def on_save(self, args: "TrainingArguments", state: "TrainerState", control: "TrainerControl", **kwargs):
-        r"""
-        Event called after a checkpoint save.
-        """
         if args.should_save:
             output_dir = os.path.join(args.output_dir, f"{PREFIX_CHECKPOINT_DIR}-{state.global_step}")
             fix_valuehead_checkpoint(
@@ -138,9 +138,6 @@ class PissaConvertCallback(TrainerCallback):
 
     @override
     def on_train_begin(self, args: "TrainingArguments", state: "TrainerState", control: "TrainerControl", **kwargs):
-        r"""
-        Event called at the beginning of training.
-        """
         if args.should_save:
             model = kwargs.pop("model")
             pissa_init_dir = os.path.join(args.output_dir, "pissa_init")
@@ -196,8 +193,8 @@ class LogCallback(TrainerCallback):
         self.aborted = False
         self.do_train = False
         # Web UI
-        self.webui_mode = os.environ.get("LLAMABOARD_ENABLED", "0").lower() in ["true", "1"]
-        if self.webui_mode:
+        self.webui_mode = is_env_enabled("LLAMABOARD_ENABLED")
+        if self.webui_mode and not use_ray():
             signal.signal(signal.SIGABRT, self._set_abort)
             self.logger_handler = logging.LoggerHandler(os.environ.get("LLAMABOARD_WORKDIR"))
             logging.add_handler(self.logger_handler)
@@ -242,7 +239,7 @@ class LogCallback(TrainerCallback):
             and os.path.exists(os.path.join(args.output_dir, TRAINER_LOG))
             and args.overwrite_output_dir
         ):
-            logger.warning_once("Previous trainer log in this folder will be deleted.")
+            logger.warning_rank0_once("Previous trainer log in this folder will be deleted.")
             os.remove(os.path.join(args.output_dir, TRAINER_LOG))
 
     @override
@@ -302,7 +299,7 @@ class LogCallback(TrainerCallback):
             logs["throughput"] = round(state.num_input_tokens_seen / (time.time() - self.start_time), 2)
             logs["total_tokens"] = state.num_input_tokens_seen
 
-        if os.environ.get("RECORD_VRAM", "0").lower() in ["true", "1"]:
+        if is_env_enabled("RECORD_VRAM"):
             vram_allocated, vram_reserved = get_peak_memory()
             logs["vram_allocated"] = round(vram_allocated / (1024**3), 2)
             logs["vram_reserved"] = round(vram_reserved / (1024**3), 2)
@@ -348,3 +345,51 @@ class LogCallback(TrainerCallback):
                     remaining_time=self.remaining_time,
                 )
                 self.thread_pool.submit(self._write_log, args.output_dir, logs)
+
+
+class ReporterCallback(TrainerCallback):
+    r"""
+    A callback for reporting training status to external logger.
+    """
+
+    def __init__(
+        self,
+        model_args: "ModelArguments",
+        data_args: "DataArguments",
+        finetuning_args: "FinetuningArguments",
+        generating_args: "GeneratingArguments",
+    ) -> None:
+        self.model_args = model_args
+        self.data_args = data_args
+        self.finetuning_args = finetuning_args
+        self.generating_args = generating_args
+        os.environ["WANDB_PROJECT"] = os.getenv("WANDB_PROJECT", "llamafactory")
+
+    @override
+    def on_train_begin(self, args: "TrainingArguments", state: "TrainerState", control: "TrainerControl", **kwargs):
+        if not state.is_world_process_zero:
+            return
+
+        if "wandb" in args.report_to:
+            import wandb
+
+            wandb.config.update(
+                {
+                    "model_args": self.model_args.to_dict(),
+                    "data_args": self.data_args.to_dict(),
+                    "finetuning_args": self.finetuning_args.to_dict(),
+                    "generating_args": self.generating_args.to_dict(),
+                }
+            )
+
+        if self.finetuning_args.use_swanlab:
+            import swanlab  # type: ignore
+
+            swanlab.config.update(
+                {
+                    "model_args": self.model_args.to_dict(),
+                    "data_args": self.data_args.to_dict(),
+                    "finetuning_args": self.finetuning_args.to_dict(),
+                    "generating_args": self.generating_args.to_dict(),
+                }
+            )

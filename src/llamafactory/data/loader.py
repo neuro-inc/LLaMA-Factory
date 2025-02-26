@@ -1,4 +1,4 @@
-# Copyright 2024 the LlamaFactory team.
+# Copyright 2025 the LlamaFactory team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -18,11 +18,10 @@ from typing import TYPE_CHECKING, Dict, Literal, Optional, Sequence, Union
 
 import numpy as np
 from datasets import DatasetDict, load_dataset, load_from_disk
-from transformers.utils.versions import require_version
 
 from ..extras import logging
 from ..extras.constants import FILEEXT2TYPE
-from ..extras.misc import has_tokenized_data
+from ..extras.misc import check_version, has_tokenized_data
 from .aligner import align_dataset
 from .data_utils import merge_dataset, split_dataset
 from .parser import get_dataset_list
@@ -84,7 +83,7 @@ def _load_single_dataset(
         raise NotImplementedError(f"Unknown load type: {dataset_attr.load_from}.")
 
     if dataset_attr.load_from == "ms_hub":
-        require_version("modelscope>=1.11.0", "To fix: pip install modelscope>=1.11.0")
+        check_version("modelscope>=1.11.0", mandatory=True)
         from modelscope import MsDataset  # type: ignore
         from modelscope.utils.config_ds import MS_DATASETS_CACHE  # type: ignore
 
@@ -103,7 +102,7 @@ def _load_single_dataset(
             dataset = dataset.to_hf_dataset()
 
     elif dataset_attr.load_from == "om_hub":
-        require_version("openmind>=0.8.0", "To fix: pip install openmind>=0.8.0")
+        check_version("openmind>=0.8.0", mandatory=True)
         from openmind import OmDataset  # type: ignore
         from openmind.utils.hub import OM_DATASETS_CACHE  # type: ignore
 
@@ -128,7 +127,8 @@ def _load_single_dataset(
             cache_dir=model_args.cache_dir,
             token=model_args.hf_hub_token,
             streaming=data_args.streaming,
-            trust_remote_code=True,
+            num_proc=data_args.preprocessing_num_workers,
+            trust_remote_code=model_args.trust_remote_code,
         )
 
     if dataset_attr.num_samples is not None and not data_args.streaming:
@@ -238,15 +238,19 @@ def get_dataset(
     if data_args.tokenized_path is not None:
         if has_tokenized_data(data_args.tokenized_path):
             logger.warning_rank0("Loading dataset from disk will ignore other data arguments.")
-            dataset_dict: "DatasetDict" = load_from_disk(data_args.tokenized_path)
+            tokenized_data: Union["Dataset", "DatasetDict"] = load_from_disk(data_args.tokenized_path)
             logger.info_rank0(f"Loaded tokenized dataset from {data_args.tokenized_path}.")
 
             dataset_module: Dict[str, "Dataset"] = {}
-            if "train" in dataset_dict:
-                dataset_module["train_dataset"] = dataset_dict["train"]
+            if isinstance(tokenized_data, DatasetDict):
+                if "train" in tokenized_data:
+                    dataset_module["train_dataset"] = tokenized_data["train"]
 
-            if "validation" in dataset_dict:
-                dataset_module["eval_dataset"] = dataset_dict["validation"]
+                if "validation" in tokenized_data:
+                    dataset_module["eval_dataset"] = tokenized_data["validation"]
+
+            else:  # Dataset
+                dataset_module["train_dataset"] = tokenized_data
 
             if data_args.streaming:
                 dataset_module = {k: v.to_iterable_dataset() for k, v in dataset_module.items()}
