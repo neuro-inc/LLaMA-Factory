@@ -1,22 +1,7 @@
 name: tests
 
 on:
-  push:
-    branches:
-      - "main"
-      - "apolo"
-    paths:
-      - "**.py"
-      - "requirements.txt"
-      - ".github/workflows/*.yml"
-  pull_request:
-    branches:
-      - "main"
-      - "apolo"
-    paths:
-      - "**.py"
-      - "requirements.txt"
-      - ".github/workflows/*.yml"
+  workflow_call: {}
 
 jobs:
   tests:
@@ -62,3 +47,15 @@ jobs:
       - name: Test with pytest
         run: |
           make test
+
+  check:
+    name: Check
+    needs:
+      - tests
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Decide whether the needed jobs succeeded or failed
+        uses: re-actors/alls-green@release/v1
+        with:
+          jobs: ${{ toJSON(needs) }
