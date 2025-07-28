@@ -14,44 +14,43 @@
 
 import os
 
-import torch
+from llamafactory.train.test_utils import load_dataset_module
 
-from llamafactory.train.test_utils import load_infer_model, load_train_model
 
+DEMO_DATA = os.getenv("DEMO_DATA", "llamafactory/demo_data")
 
 TINY_LLAMA = os.getenv("TINY_LLAMA", "llamafactory/tiny-random-Llama-3")
+
+TINY_DATA = os.getenv("TINY_DATA", "llamafactory/tiny-supervised-dataset")
 
 TRAIN_ARGS = {
     "model_name_or_path": TINY_LLAMA,
     "stage": "sft",
     "do_train": True,
     "finetuning_type": "full",
-    "dataset": "llamafactory/tiny-supervised-dataset",
-    "dataset_dir": "ONLINE",
     "template": "llama3",
-    "cutoff_len": 1024,
+    "dataset": TINY_DATA,
+    "dataset_dir": "ONLINE",
+    "cutoff_len": 8192,
     "output_dir": "dummy_dir",
     "overwrite_output_dir": True,
     "fp16": True,
 }
 
-INFER_ARGS = {
-    "model_name_or_path": TINY_LLAMA,
-    "finetuning_type": "full",
-    "template": "llama3",
-    "infer_dtype": "float16",
-}
+
+def test_load_train_only():
+    dataset_module = load_dataset_module(**TRAIN_ARGS)
+    assert dataset_module.get("train_dataset") is not None
+    assert dataset_module.get("eval_dataset") is None
 
 
-def test_full_train():
-    model = load_train_model(**TRAIN_ARGS)
-    for param in model.parameters():
-        assert param.requires_grad is True
-        assert param.dtype == torch.float32
+def test_load_val_size():
+    dataset_module = load_dataset_module(val_size=0.1, **TRAIN_ARGS)
+    assert dataset_module.get("train_dataset") is not None
+    assert dataset_module.get("eval_dataset") is not None
 
 
-def test_full_inference():
-    model = load_infer_model(**INFER_ARGS)
-    for param in model.parameters():
-        assert param.requires_grad is False
-        assert param.dtype == torch.float16
+def test_load_eval_data():
+    dataset_module = load_dataset_module(eval_dataset=TINY_DATA, **TRAIN_ARGS)
+    assert dataset_module.get("train_dataset") is not None
+    assert dataset_module.get("eval_dataset") is not None

@@ -87,9 +87,10 @@ def _parse_args(
 
 
 def _set_transformers_logging() -> None:
-    transformers.utils.logging.set_verbosity_info()
-    transformers.utils.logging.enable_default_handler()
-    transformers.utils.logging.enable_explicit_format()
+    if os.getenv("LLAMAFACTORY_VERBOSITY", "INFO") in ["DEBUG", "INFO"]:
+        transformers.utils.logging.set_verbosity_info()
+        transformers.utils.logging.enable_default_handler()
+        transformers.utils.logging.enable_explicit_format()
 
 
 def _verify_model_args(
@@ -136,7 +137,7 @@ def _check_extra_dependencies(
         check_version("mixture-of-depth>=1.1.6", mandatory=True)
 
     if model_args.infer_backend == "vllm":
-        check_version("vllm>=0.4.3,<=0.7.2")
+        check_version("vllm>=0.4.3,<=0.7.3")
         check_version("vllm", mandatory=True)
 
     if finetuning_args.use_galore:
@@ -381,10 +382,10 @@ def get_train_args(args: Optional[Union[Dict[str, Any], List[str]]] = None) -> _
 
     # Log on each process the small summary
     logger.info(
-        "Process rank: {}, device: {}, n_gpu: {}, distributed training: {}, compute dtype: {}".format(
-            training_args.local_rank,
+        "Process rank: {}, world size: {}, device: {}, distributed training: {}, compute dtype: {}".format(
+            training_args.process_index,
+            training_args.world_size,
             training_args.device,
-            training_args.n_gpu,
             training_args.parallel_mode == ParallelMode.DISTRIBUTED,
             str(model_args.compute_dtype),
         )
@@ -417,7 +418,8 @@ def get_infer_args(args: Optional[Union[Dict[str, Any], List[str]]] = None) -> _
 
     if model_args.export_dir is not None and model_args.export_device == "cpu":
         model_args.device_map = {"": torch.device("cpu")}
-        model_args.model_max_length = data_args.cutoff_len
+        if data_args.cutoff_len != DataArguments().cutoff_len:  # override cutoff_len if it is not default
+            model_args.model_max_length = data_args.cutoff_len
     else:
         model_args.device_map = "auto"
 

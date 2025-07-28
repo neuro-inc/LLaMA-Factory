@@ -25,133 +25,9 @@ from typing_extensions import Self
 
 
 @dataclass
-class QuantizationArguments:
+class BaseModelArguments:
     r"""
-    Arguments pertaining to the quantization method.
-    """
-
-    quantization_method: Literal["bitsandbytes", "hqq", "eetq"] = field(
-        default="bitsandbytes",
-        metadata={"help": "Quantization method to use for on-the-fly quantization."},
-    )
-    quantization_bit: Optional[int] = field(
-        default=None,
-        metadata={"help": "The number of bits to quantize the model using on-the-fly quantization."},
-    )
-    quantization_type: Literal["fp4", "nf4"] = field(
-        default="nf4",
-        metadata={"help": "Quantization data type to use in bitsandbytes int4 training."},
-    )
-    double_quantization: bool = field(
-        default=True,
-        metadata={"help": "Whether or not to use double quantization in bitsandbytes int4 training."},
-    )
-    quantization_device_map: Optional[Literal["auto"]] = field(
-        default=None,
-        metadata={"help": "Device map used to infer the 4-bit quantized model, needs bitsandbytes>=0.43.0."},
-    )
-
-
-@dataclass
-class ProcessorArguments:
-    r"""
-    Arguments pertaining to the image processor.
-    """
-
-    image_resolution: int = field(
-        default=768 * 768,
-        metadata={"help": "The maximum number of pixels of image inputs."},
-    )
-    video_resolution: int = field(
-        default=256 * 256,
-        metadata={"help": "The maximum number of pixels of video inputs."},
-    )
-    video_fps: float = field(
-        default=2.0,
-        metadata={"help": "The frames to sample per second for video inputs."},
-    )
-    video_maxlen: int = field(
-        default=128,
-        metadata={"help": "The maximum number of sampled frames for video inputs."},
-    )
-
-
-@dataclass
-class ExportArguments:
-    r"""
-    Arguments pertaining to the model export.
-    """
-
-    export_dir: Optional[str] = field(
-        default=None,
-        metadata={"help": "Path to the directory to save the exported model."},
-    )
-    export_size: int = field(
-        default=5,
-        metadata={"help": "The file shard size (in GB) of the exported model."},
-    )
-    export_device: Literal["cpu", "auto"] = field(
-        default="cpu",
-        metadata={"help": "The device used in model export, use `auto` to accelerate exporting."},
-    )
-    export_quantization_bit: Optional[int] = field(
-        default=None,
-        metadata={"help": "The number of bits to quantize the exported model."},
-    )
-    export_quantization_dataset: Optional[str] = field(
-        default=None,
-        metadata={"help": "Path to the dataset or dataset name to use in quantizing the exported model."},
-    )
-    export_quantization_nsamples: int = field(
-        default=128,
-        metadata={"help": "The number of samples used for quantization."},
-    )
-    export_quantization_maxlen: int = field(
-        default=1024,
-        metadata={"help": "The maximum length of the model inputs used for quantization."},
-    )
-    export_legacy_format: bool = field(
-        default=False,
-        metadata={"help": "Whether or not to save the `.bin` files instead of `.safetensors`."},
-    )
-    export_hub_model_id: Optional[str] = field(
-        default=None,
-        metadata={"help": "The name of the repository if push the model to the Hugging Face hub."},
-    )
-
-
-@dataclass
-class VllmArguments:
-    r"""
-    Arguments pertaining to the vLLM worker.
-    """
-
-    vllm_maxlen: int = field(
-        default=4096,
-        metadata={"help": "Maximum sequence (prompt + response) length of the vLLM engine."},
-    )
-    vllm_gpu_util: float = field(
-        default=0.9,
-        metadata={"help": "The fraction of GPU memory in (0,1) to be used for the vLLM engine."},
-    )
-    vllm_enforce_eager: bool = field(
-        default=False,
-        metadata={"help": "Whether or not to disable CUDA graph in the vLLM engine."},
-    )
-    vllm_max_lora_rank: int = field(
-        default=32,
-        metadata={"help": "Maximum rank of all LoRAs in the vLLM engine."},
-    )
-    vllm_config: Optional[Union[dict, str]] = field(
-        default=None,
-        metadata={"help": "Config to initialize the vllm engine. Please use JSON strings."},
-    )
-
-
-@dataclass
-class ModelArguments(QuantizationArguments, ProcessorArguments, ExportArguments, VllmArguments):
-    r"""
-    Arguments pertaining to which model/config/tokenizer we are going to fine-tune or infer.
+    Arguments pertaining to the model.
     """
 
     model_name_or_path: Optional[str] = field(
@@ -223,7 +99,7 @@ class ModelArguments(QuantizationArguments, ProcessorArguments, ExportArguments,
     )
     use_unsloth_gc: bool = field(
         default=False,
-        metadata={"help": "Whether or not to use unsloth's gradient checkpointing."},
+        metadata={"help": "Whether or not to use unsloth's gradient checkpointing (no need to install unsloth)."},
     )
     enable_liger_kernel: bool = field(
         default=False,
@@ -289,6 +165,169 @@ class ModelArguments(QuantizationArguments, ProcessorArguments, ExportArguments,
         default=False,
         metadata={"help": "Whether to trust the execution of code from datasets/models defined on the Hub or not."},
     )
+
+    def __post_init__(self):
+        if self.model_name_or_path is None:
+            raise ValueError("Please provide `model_name_or_path`.")
+
+        if self.split_special_tokens and self.use_fast_tokenizer:
+            raise ValueError("`split_special_tokens` is only supported for slow tokenizers.")
+
+        if self.adapter_name_or_path is not None:  # support merging multiple lora weights
+            self.adapter_name_or_path = [path.strip() for path in self.adapter_name_or_path.split(",")]
+
+        if self.new_special_tokens is not None:  # support multiple special tokens
+            self.new_special_tokens = [token.strip() for token in self.new_special_tokens.split(",")]
+
+
+@dataclass
+class QuantizationArguments:
+    r"""
+    Arguments pertaining to the quantization method.
+    """
+
+    quantization_method: Literal["bitsandbytes", "hqq", "eetq"] = field(
+        default="bitsandbytes",
+        metadata={"help": "Quantization method to use for on-the-fly quantization."},
+    )
+    quantization_bit: Optional[int] = field(
+        default=None,
+        metadata={"help": "The number of bits to quantize the model using on-the-fly quantization."},
+    )
+    quantization_type: Literal["fp4", "nf4"] = field(
+        default="nf4",
+        metadata={"help": "Quantization data type to use in bitsandbytes int4 training."},
+    )
+    double_quantization: bool = field(
+        default=True,
+        metadata={"help": "Whether or not to use double quantization in bitsandbytes int4 training."},
+    )
+    quantization_device_map: Optional[Literal["auto"]] = field(
+        default=None,
+        metadata={"help": "Device map used to infer the 4-bit quantized model, needs bitsandbytes>=0.43.0."},
+    )
+
+
+@dataclass
+class ProcessorArguments:
+    r"""
+    Arguments pertaining to the image processor.
+    """
+
+    image_max_pixels: int = field(
+        default=768 * 768,
+        metadata={"help": "The maximum number of pixels of image inputs."},
+    )
+    image_min_pixels: int = field(
+        default=32 * 32,
+        metadata={"help": "The minimum number of pixels of image inputs."},
+    )
+    video_max_pixels: int = field(
+        default=256 * 256,
+        metadata={"help": "The maximum number of pixels of video inputs."},
+    )
+    video_min_pixels: int = field(
+        default=16 * 16,
+        metadata={"help": "The minimum number of pixels of video inputs."},
+    )
+    video_fps: float = field(
+        default=2.0,
+        metadata={"help": "The frames to sample per second for video inputs."},
+    )
+    video_maxlen: int = field(
+        default=128,
+        metadata={"help": "The maximum number of sampled frames for video inputs."},
+    )
+
+
+@dataclass
+class ExportArguments:
+    r"""
+    Arguments pertaining to the model export.
+    """
+
+    export_dir: Optional[str] = field(
+        default=None,
+        metadata={"help": "Path to the directory to save the exported model."},
+    )
+    export_size: int = field(
+        default=5,
+        metadata={"help": "The file shard size (in GB) of the exported model."},
+    )
+    export_device: Literal["cpu", "auto"] = field(
+        default="cpu",
+        metadata={"help": "The device used in model export, use `auto` to accelerate exporting."},
+    )
+    export_quantization_bit: Optional[int] = field(
+        default=None,
+        metadata={"help": "The number of bits to quantize the exported model."},
+    )
+    export_quantization_dataset: Optional[str] = field(
+        default=None,
+        metadata={"help": "Path to the dataset or dataset name to use in quantizing the exported model."},
+    )
+    export_quantization_nsamples: int = field(
+        default=128,
+        metadata={"help": "The number of samples used for quantization."},
+    )
+    export_quantization_maxlen: int = field(
+        default=1024,
+        metadata={"help": "The maximum length of the model inputs used for quantization."},
+    )
+    export_legacy_format: bool = field(
+        default=False,
+        metadata={"help": "Whether or not to save the `.bin` files instead of `.safetensors`."},
+    )
+    export_hub_model_id: Optional[str] = field(
+        default=None,
+        metadata={"help": "The name of the repository if push the model to the Hugging Face hub."},
+    )
+
+    def __post_init__(self):
+        if self.export_quantization_bit is not None and self.export_quantization_dataset is None:
+            raise ValueError("Quantization dataset is necessary for exporting.")
+
+
+@dataclass
+class VllmArguments:
+    r"""
+    Arguments pertaining to the vLLM worker.
+    """
+
+    vllm_maxlen: int = field(
+        default=4096,
+        metadata={"help": "Maximum sequence (prompt + response) length of the vLLM engine."},
+    )
+    vllm_gpu_util: float = field(
+        default=0.9,
+        metadata={"help": "The fraction of GPU memory in (0,1) to be used for the vLLM engine."},
+    )
+    vllm_enforce_eager: bool = field(
+        default=False,
+        metadata={"help": "Whether or not to disable CUDA graph in the vLLM engine."},
+    )
+    vllm_max_lora_rank: int = field(
+        default=32,
+        metadata={"help": "Maximum rank of all LoRAs in the vLLM engine."},
+    )
+    vllm_config: Optional[Union[dict, str]] = field(
+        default=None,
+        metadata={"help": "Config to initialize the vllm engine. Please use JSON strings."},
+    )
+
+    def __post_init__(self):
+        if isinstance(self.vllm_config, str) and self.vllm_config.startswith("{"):
+            self.vllm_config = _convert_str_dict(json.loads(self.vllm_config))
+
+
+@dataclass
+class ModelArguments(VllmArguments, ExportArguments, ProcessorArguments, QuantizationArguments, BaseModelArguments):
+    r"""
+    Arguments pertaining to which model/config/tokenizer we are going to fine-tune or infer.
+
+    The class on the most right will be displayed first.
+    """
+
     compute_dtype: Optional[torch.dtype] = field(
         default=None,
         init=False,
@@ -311,23 +350,9 @@ class ModelArguments(QuantizationArguments, ProcessorArguments, ExportArguments,
     )
 
     def __post_init__(self):
-        if self.model_name_or_path is None:
-            raise ValueError("Please provide `model_name_or_path`.")
-
-        if self.split_special_tokens and self.use_fast_tokenizer:
-            raise ValueError("`split_special_tokens` is only supported for slow tokenizers.")
-
-        if self.adapter_name_or_path is not None:  # support merging multiple lora weights
-            self.adapter_name_or_path = [path.strip() for path in self.adapter_name_or_path.split(",")]
-
-        if self.new_special_tokens is not None:  # support multiple special tokens
-            self.new_special_tokens = [token.strip() for token in self.new_special_tokens.split(",")]
-
-        if self.export_quantization_bit is not None and self.export_quantization_dataset is None:
-            raise ValueError("Quantization dataset is necessary for exporting.")
-
-        if isinstance(self.vllm_config, str) and self.vllm_config.startswith("{"):
-            self.vllm_config = _convert_str_dict(json.loads(self.vllm_config))
+        BaseModelArguments.__post_init__(self)
+        ExportArguments.__post_init__(self)
+        VllmArguments.__post_init__(self)
 
     @classmethod
     def copyfrom(cls, source: "Self", **kwargs) -> "Self":

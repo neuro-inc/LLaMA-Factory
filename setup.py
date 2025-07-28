@@ -44,7 +44,7 @@ def get_console_scripts() -> List[str]:
 
 extra_require = {
     "torch": ["torch>=1.13.1"],
-    "torch-npu": ["torch==2.1.0", "torch-npu==2.1.0.post3", "decorator"],
+    "torch-npu": ["torch==2.4.0", "torch-npu==2.4.0.post2", "decorator"],
     "metrics": ["nltk", "jieba", "rouge-chinese"],
     "deepspeed": ["deepspeed>=0.10.0,<=0.16.2"],
     "liger-kernel": ["liger-kernel"],
@@ -54,7 +54,7 @@ extra_require = {
     "gptq": ["optimum>=1.17.0", "auto-gptq>=0.5.0"],
     "awq": ["autoawq"],
     "aqlm": ["aqlm[gpu]>=1.1.0"],
-    "vllm": ["vllm>=0.4.3,<=0.7.2"],
+    "vllm": ["vllm>=0.4.3,<=0.7.3"],
     "galore": ["galore-torch"],
     "apollo": ["apollo-torch"],
     "badam": ["badam>=1.2.1"],
